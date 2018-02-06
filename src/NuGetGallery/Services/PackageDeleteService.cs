@@ -3,7 +3,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Data.Entity;
 using System.Data.SqlClient;
 using System.Linq;
 using System.Threading.Tasks;
@@ -42,6 +41,7 @@ namespace NuGetGallery
         private readonly IPackageFileService _packageFileService;
         private readonly IAuditingService _auditingService;
         private readonly IPackageDeleteConfiguration _config;
+        private readonly IStatisticsService _statisticsService;
 
         public PackageDeleteService(
             IEntityRepository<Package> packageRepository,
@@ -52,17 +52,19 @@ namespace NuGetGallery
             IIndexingService indexingService,
             IPackageFileService packageFileService,
             IAuditingService auditingService,
-            IPackageDeleteConfiguration config)
+            IPackageDeleteConfiguration config,
+            IStatisticsService statisticsService)
         {
-            _packageRepository = packageRepository;
-            _packageRegistrationRepository = packageRegistrationRepository;
-            _packageDeletesRepository = packageDeletesRepository;
-            _entitiesContext = entitiesContext;
-            _packageService = packageService;
-            _indexingService = indexingService;
-            _packageFileService = packageFileService;
-            _auditingService = auditingService;
-            _config = config;
+            _packageRepository = packageRepository ?? throw new ArgumentNullException(nameof(packageRepository));
+            _packageRegistrationRepository = packageRegistrationRepository ?? throw new ArgumentNullException(nameof(packageRegistrationRepository));
+            _packageDeletesRepository = packageDeletesRepository ?? throw new ArgumentNullException(nameof(packageDeletesRepository));
+            _entitiesContext = entitiesContext ?? throw new ArgumentNullException(nameof(entitiesContext));
+            _packageService = packageService ?? throw new ArgumentNullException(nameof(packageService));
+            _indexingService = indexingService ?? throw new ArgumentNullException(nameof(indexingService));
+            _packageFileService = packageFileService ?? throw new ArgumentNullException(nameof(packageFileService));
+            _auditingService = auditingService ?? throw new ArgumentNullException(nameof(auditingService));
+            _config = config ?? throw new ArgumentNullException(nameof(config));
+            _statisticsService = statisticsService ?? throw new ArgumentNullException(nameof(statisticsService));
 
             if (config.HourLimitWithMaximumDownloads.HasValue
                 && config.StatisticsUpdateFrequencyInHours.HasValue
@@ -74,16 +76,100 @@ namespace NuGetGallery
             }
         }
 
-        public Task<bool> CanPackageBeDeletedByUserAsync(Package package)
+        public async Task<bool> CanPackageBeDeletedByUserAsync(Package package)
         {
-            if (package.PackageStatusKey == PackageStatus.Deleted)
+            // Do not allow the delete if the package is already deleted, if the ID is locked, or if this feature is
+            // disabled entirely.
+            if (package.PackageStatusKey == PackageStatus.Deleted
+                || package.PackageRegistration.IsLocked
+                || !_config.AllowUsersToDeletePackages)
             {
-                return Task.FromResult(false);
+                return false;
             }
 
-            // For now, don't allow user's to delete their packages.
-            // https://github.com/NuGet/Engineering/issues/921
-            return Task.FromResult(false);
+            var now = DateTime.UtcNow;
+            var sinceCreated = now - package.Created;
+
+            // Always refresh the statistics.
+            await _statisticsService.Refresh();
+
+            // Handle the "early" delete case, where the package version download count is not considered but total
+            // download count on the entire ID (all versions) is considered.
+            if (_config.StatisticsUpdateFrequencyInHours.HasValue
+                && sinceCreated < TimeSpan.FromHours(_config.StatisticsUpdateFrequencyInHours.Value))
+            {
+                if (_config.MaximumDownloadsForPackageId.HasValue)
+                {
+                    // Do not allow a delete of a package version if the package registration record has too many downloads.
+                    if (package.PackageRegistration.DownloadCount > _config.MaximumDownloadsForPackageId.Value)
+                    {
+                        return false;
+                    }
+
+                    // Do not allow a delete of a package version if the package ID report has too many downloads.
+                    var report = await _statisticsService.GetPackageDownloadsByVersion(package.PackageRegistration.Id);
+                    var reportDownloads = report?.Facts.Sum(x => x.Amount) ?? 0;
+                    if (reportDownloads > _config.MaximumDownloadsForPackageId.Value)
+                    {
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+
+            // Handle the "late" delete case, where package version download count is considered.
+            if (_config.HourLimitWithMaximumDownloads.HasValue
+                && sinceCreated < TimeSpan.FromHours(_config.HourLimitWithMaximumDownloads.Value))
+            {
+                if (_config.MaximumDownloadsForPackageVersion.HasValue)
+                {
+                    // Do not allow the delete if the statistics are stale.
+                    if (AreStatisticsStale(now))
+                    {
+                        return false;
+                    }
+
+                    // Do not allow a delete of a package version if the package record has too many downloads.
+                    if (package.DownloadCount > _config.MaximumDownloadsForPackageVersion.Value)
+                    {
+                        return false;
+                    }
+
+                    // Do not allow a delete of a package version if the package report has too many downloads.
+                    var report = await _statisticsService.GetPackageVersionDownloadsByClient(
+                        package.PackageRegistration.Id,
+                        package.NormalizedVersion);
+                    var reportDownloads = report?.Facts.Sum(x => x.Amount) ?? 0;
+                    if (reportDownloads > _config.MaximumDownloadsForPackageVersion.Value)
+                    {
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+
+            // If no time ranges are configured, allow downloads any time.
+            return !_config.HourLimitWithMaximumDownloads.HasValue
+                && !_config.StatisticsUpdateFrequencyInHours.HasValue;
+        }
+
+        private bool AreStatisticsStale(DateTime now)
+        {
+            var lastUpdated = _statisticsService.LastUpdatedUtc;
+            if (!lastUpdated.HasValue)
+            {
+                return true;
+            }
+
+            var sinceUpdated = now - lastUpdated.Value;
+            if (sinceUpdated > TimeSpan.FromHours(_config.StatisticsUpdateFrequencyInHours.Value))
+            {
+                return true;
+            }
+
+            return false;
         }
 
         public async Task SoftDeletePackagesAsync(IEnumerable<Package> packages, User deletedBy, string reason, string signature)
