@@ -79,7 +79,7 @@ namespace NuGetGallery
             }
         }
 
-        public async Task<bool> CanPackageBeDeletedByUserAsync(Package package, bool onlyRejectedTelemetry)
+        public async Task<bool> CanPackageBeDeletedByUserAsync(Package package)
         {
             if (!_config.AllowUsersToDeletePackages)
             {
@@ -90,12 +90,12 @@ namespace NuGetGallery
 
             if (package.PackageStatusKey == PackageStatus.Deleted)
             {
-                return IsAccepted(details, onlyRejectedTelemetry, UserPackageDeleteOutcome.AlreadyDeleted);
+                return IsAccepted(details, UserPackageDeleteOutcome.AlreadyDeleted);
             }
 
             if (package.PackageRegistration.IsLocked)
             {
-                return IsAccepted(details, onlyRejectedTelemetry, UserPackageDeleteOutcome.LockedRegistration);
+                return IsAccepted(details, UserPackageDeleteOutcome.LockedRegistration);
             }
 
             // Handle the "early" delete case, where the package version download count is not considered but total
@@ -108,17 +108,17 @@ namespace NuGetGallery
                     // Do not allow a delete of a package version if the package registration record has too many downloads.
                     if (details.IdDatabaseDownloads > _config.MaximumDownloadsForPackageId.Value)
                     {
-                        return IsAccepted(details, onlyRejectedTelemetry, UserPackageDeleteOutcome.TooManyIdDatabaseDownloads);
+                        return IsAccepted(details, UserPackageDeleteOutcome.TooManyIdDatabaseDownloads);
                     }
 
                     // Do not allow a delete of a package version if the package ID report has too many downloads.
                     if (details.IdReportDownloads > _config.MaximumDownloadsForPackageId.Value)
                     {
-                        return IsAccepted(details, onlyRejectedTelemetry, UserPackageDeleteOutcome.TooManyIdReportDownloads);
+                        return IsAccepted(details, UserPackageDeleteOutcome.TooManyIdReportDownloads);
                     }
                 }
 
-                return IsAccepted(details, onlyRejectedTelemetry, UserPackageDeleteOutcome.Accepted);
+                return IsAccepted(details, UserPackageDeleteOutcome.Accepted);
             }
 
             // Handle the "late" delete case, where package version download count is considered.
@@ -130,49 +130,40 @@ namespace NuGetGallery
                     // Do not allow the delete if the statistics are stale.
                     if (await AreStatisticsStaleAsync())
                     {
-                        return IsAccepted(details, onlyRejectedTelemetry, UserPackageDeleteOutcome.StaleStatistics);
+                        return IsAccepted(details, UserPackageDeleteOutcome.StaleStatistics);
                     }
 
                     // Do not allow a delete of a package version if the package record has too many downloads.
                     if (details.VersionDatabaseDownloads > _config.MaximumDownloadsForPackageVersion.Value)
                     {
-                        return IsAccepted(details, onlyRejectedTelemetry, UserPackageDeleteOutcome.TooManyVersionDatabaseDownloads);
+                        return IsAccepted(details, UserPackageDeleteOutcome.TooManyVersionDatabaseDownloads);
                     }
 
                     // Do not allow a delete of a package version if the package report has too many downloads.
                     if (details.VersionReportDownloads > _config.MaximumDownloadsForPackageVersion.Value)
                     {
-                        return IsAccepted(details, onlyRejectedTelemetry, UserPackageDeleteOutcome.TooManyVersionReportDownloads);
+                        return IsAccepted(details, UserPackageDeleteOutcome.TooManyVersionReportDownloads);
                     }
                 }
 
-                return IsAccepted(details, onlyRejectedTelemetry, UserPackageDeleteOutcome.Accepted);
+                return IsAccepted(details, UserPackageDeleteOutcome.Accepted);
             }
 
             // If no time ranges are configured, allow downloads any time.
             if (_config.HourLimitWithMaximumDownloads.HasValue
                 || _config.ExpectedStatisticsUpdateFrequencyInHours.HasValue)
             {
-                return IsAccepted(details, onlyRejectedTelemetry, UserPackageDeleteOutcome.TooLate);
+                return IsAccepted(details,  UserPackageDeleteOutcome.TooLate);
             }
             
-            return IsAccepted(details, onlyRejectedTelemetry, UserPackageDeleteOutcome.Accepted);
+            return IsAccepted(details, UserPackageDeleteOutcome.Accepted);
         }
         
-        private bool IsAccepted(
-            UserPackageDeleteEvent details,
-            bool onlyRejectedTelemetry,
-            UserPackageDeleteOutcome outcome)
+        private bool IsAccepted(UserPackageDeleteEvent details, UserPackageDeleteOutcome outcome)
         {
-            var isAccepted = outcome == UserPackageDeleteOutcome.Accepted;
-            
-            if (!isAccepted
-                || (isAccepted && !onlyRejectedTelemetry))
-            {
-                _telemetryService.TrackUserPackageDelete(details, outcome);
-            }
-            
-            return isAccepted;
+            _telemetryService.TrackUserPackageDelete(details, outcome);
+
+            return outcome == UserPackageDeleteOutcome.Accepted;
         }
 
         private async Task<UserPackageDeleteEvent> GetUserPackageDeleteEvent(Package package)
@@ -187,7 +178,7 @@ namespace NuGetGallery
 
             var versionReportDownloads = report?
                 .Facts
-                .Where(x => StringComparer.OrdinalIgnoreCase.Equals(package.NormalizedVersion, x.Dimensions["Version"]))
+                .Where(x => HasVersion(x, package.NormalizedVersion))
                 .Sum(x => x.Amount) ?? 0;
 
             var details = new UserPackageDeleteEvent(
@@ -200,6 +191,18 @@ namespace NuGetGallery
                 versionReportDownloads);
 
             return details;
+        }
+
+        private bool HasVersion(StatisticsFact fact, string version)
+        {
+            if (fact != null
+                && fact.Dimensions.TryGetValue("Version", out string actualVersion)
+                && StringComparer.OrdinalIgnoreCase.Equals(version, actualVersion))
+            {
+                return true;
+            }
+
+            return false;
         }
 
         private async Task<bool> AreStatisticsStaleAsync()

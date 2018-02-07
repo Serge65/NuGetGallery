@@ -166,11 +166,10 @@ namespace NuGetGallery
         public class TheCanPackageBeDeletedByUserAsyncMethod
         {
             private readonly Package _package;
-            private readonly bool _onlyRejectedTelemetry;
-            private readonly StatisticsPackagesReport _packageIdReport;
-            private readonly StatisticsPackagesReport _packageVersionReport;
+            private readonly StatisticsPackagesReport _packageReport;
             private readonly Mock<IPackageDeleteConfiguration> _config;
             private readonly Mock<IStatisticsService> _statisticsService;
+            private readonly Mock<ITelemetryService> _telemetryService;
             private readonly IPackageDeleteService _target;
 
             public TheCanPackageBeDeletedByUserAsyncMethod()
@@ -188,19 +187,11 @@ namespace NuGetGallery
                     DownloadCount = 0,
                     Created = DateTime.UtcNow,
                 };
-                _onlyRejectedTelemetry = false;
-                _packageIdReport = new StatisticsPackagesReport
+                _packageReport = new StatisticsPackagesReport
                 {
                     Facts = new List<StatisticsFact>()
                     {
-                        new StatisticsFact(new Dictionary<string, string>(), 0),
-                    },
-                };
-                _packageVersionReport = new StatisticsPackagesReport
-                {
-                    Facts = new List<StatisticsFact>()
-                    {
-                        new StatisticsFact(new Dictionary<string, string>(), 0),
+                        MakeFact("4.5.0", 0),
                     },
                 };
 
@@ -215,14 +206,14 @@ namespace NuGetGallery
                 _statisticsService.Setup(x => x.LastUpdatedUtc).Returns(DateTime.UtcNow);
                 _statisticsService
                     .Setup(x => x.GetPackageDownloadsByVersion(It.IsAny<string>()))
-                    .ReturnsAsync(() => _packageIdReport);
-                _statisticsService
-                    .Setup(x => x.GetPackageVersionDownloadsByClient(It.IsAny<string>(), It.IsAny<string>()))
-                    .ReturnsAsync(() => _packageVersionReport);
+                    .ReturnsAsync(() => _packageReport);
+
+                _telemetryService = new Mock<ITelemetryService>();
 
                 _target = CreateService(
                     config: _config,
-                    statisticsService: _statisticsService);
+                    statisticsService: _statisticsService,
+                    telemetryService: _telemetryService);
             }
 
             [Fact]
@@ -260,8 +251,8 @@ namespace NuGetGallery
             public async Task AllowDeletesWhenTheIdReportDoesNotHaveTooManyDownloadsButStatisticsAreStale()
             {
                 MakeStatisticsStale();
-                _packageIdReport.Facts.Add(new StatisticsFact(new Dictionary<string, string>(), 124000));
-                _packageIdReport.Facts.Add(new StatisticsFact(new Dictionary<string, string>(), 999));
+                _packageReport.Facts.Add(MakeFact("3.3.0", 124000));
+                _packageReport.Facts.Add(MakeFact("3.4.0", 999));
 
                 var actual = await _target.CanPackageBeDeletedByUserAsync(_package);
 
@@ -387,8 +378,8 @@ namespace NuGetGallery
             [Fact]
             public async Task DoesNotAllowDeletesWhenTheIdReportHasTooManyDownloads()
             {
-                _packageIdReport.Facts.Add(new StatisticsFact(new Dictionary<string, string>(), 124000));
-                _packageIdReport.Facts.Add(new StatisticsFact(new Dictionary<string, string>(), 1001));
+                _packageReport.Facts.Add(MakeFact("3.3.0", 124000));
+                _packageReport.Facts.Add(MakeFact("3.4.0", 1001));
 
                 var actual = await _target.CanPackageBeDeletedByUserAsync(_package);
 
@@ -410,12 +401,22 @@ namespace NuGetGallery
             public async Task DoesNotAllowDeletesWhenTheVersionReportTooManyDownloads()
             {
                 _package.Created = DateTime.UtcNow.AddHours(-25);
-                _packageVersionReport.Facts.Add(new StatisticsFact(new Dictionary<string, string>(), 50));
-                _packageVersionReport.Facts.Add(new StatisticsFact(new Dictionary<string, string>(), 51));
+                _packageReport.Facts.Add(MakeFact("4.5.0", 50));
+                _packageReport.Facts.Add(MakeFact("4.5.0", 51));
 
                 var actual = await _target.CanPackageBeDeletedByUserAsync(_package);
 
                 Assert.False(actual, "Deletes should not be allowed when the version report has too many downloads.");
+            }
+
+            private static StatisticsFact MakeFact(string version, int downloads)
+            {
+                return new StatisticsFact(
+                    new Dictionary<string, string>
+                    {
+                        { "Version", version },
+                    },
+                    downloads);
             }
 
             private void MakeStatisticsStale()
