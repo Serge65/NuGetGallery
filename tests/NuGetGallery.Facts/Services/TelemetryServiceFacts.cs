@@ -70,13 +70,32 @@ namespace NuGetGallery
                 }
             }
 
+            public static IEnumerable<object[]> TrackMetricNames_Data
+            {
+                get
+                {
+                    yield return new object[] { "UserPackageDeleteAfterHours",
+                        (TrackAction)(s => s.TrackUserPackageDelete(
+                            new UserPackageDeleteEvent(
+                                TimeSpan.FromHours(3),
+                                "NuGet.Versioning",
+                                "4.5.0",
+                                124101,
+                                124999,
+                                23,
+                                42),
+                            UserPackageDeleteOutcome.Accepted))
+                    };
+                }
+            }
+
             [Fact]
             public void TrackEventNamesIncludesAllEvents()
             {
-                var count = typeof(TelemetryService.Events).GetFields().Length;
-                var testData = TrackEventNames_Data;
+                var expectedCount = typeof(TelemetryService.Events).GetFields().Length;
+                var actualCount = TrackEventNames_Data.Count() + TrackMetricNames_Data.Count();
 
-                Assert.Equal(count, testData.Count());
+                Assert.Equal(expectedCount, actualCount);
             }
 
             [Theory]
@@ -95,7 +114,24 @@ namespace NuGetGallery
                     It.IsAny<IDictionary<string, double>>()),
                     Times.Once);
             }
-            
+
+            [Theory]
+            [MemberData(nameof(TrackMetricNames_Data))]
+            public void TrackMetricNames(string metricName, TrackAction track)
+            {
+                // Arrange
+                var service = CreateService();
+
+                // Act
+                track(service);
+
+                // Assert
+                service.TelemetryClient.Verify(c => c.TrackMetric(metricName,
+                    It.IsAny<double>(),
+                    It.IsAny<IDictionary<string, string>>()),
+                    Times.Once);
+            }
+
             [Fact]
             public void TrackPackageReadMeChangeEventThrowsIfPackageIsNull()
             {
@@ -195,6 +231,17 @@ namespace NuGetGallery
                 // Act & Assert
                 Assert.Throws<ArgumentNullException>(() =>
                     service.TrackVerifyPackageKeyEvent("id", "1.0.0", fakes.User, null, 200));
+            }
+
+            [Fact]
+            public void TrackUserPackageDeleteThrowsIfDetailsAreNull()
+            {
+                // Arrange
+                var service = CreateService();
+
+                // Act & Assert
+                Assert.Throws<ArgumentNullException>(() =>
+                    service.TrackUserPackageDelete(details: null, outcome: UserPackageDeleteOutcome.Accepted));
             }
         }
 

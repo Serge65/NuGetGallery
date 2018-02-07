@@ -25,6 +25,8 @@ namespace NuGetGallery
 
         void TrackNewCredentialCreated(User user, Credential credential);
 
+        void TrackUserPackageDelete(UserPackageDeleteEvent details, UserPackageDeleteOutcome outcome);
+
         /// <summary>
         /// Create a trace for an exception. These are informational for support requests.
         /// </summary>

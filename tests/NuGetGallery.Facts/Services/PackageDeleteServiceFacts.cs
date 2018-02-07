@@ -30,6 +30,7 @@ namespace NuGetGallery
             Mock<IAuditingService> auditingService = null,
             Mock<IPackageDeleteConfiguration> config = null,
             Mock<IStatisticsService> statisticsService = null,
+            Mock<ITelemetryService> telemetryService = null,
             Action<Mock<TestPackageDeleteService>> setup = null,
             bool useRealConstructor = false)
         {
@@ -51,6 +52,8 @@ namespace NuGetGallery
 
             statisticsService = statisticsService ?? new Mock<IStatisticsService>();
 
+            telemetryService = telemetryService ?? new Mock<ITelemetryService>();
+
             if (useRealConstructor)
             {
                 return new PackageDeleteService(
@@ -63,7 +66,8 @@ namespace NuGetGallery
                     packageFileService.Object,
                     auditingService.Object,
                     config.Object,
-                    statisticsService.Object);
+                    statisticsService.Object,
+                    telemetryService.Object);
             }
             else
             {
@@ -77,7 +81,8 @@ namespace NuGetGallery
                     packageFileService.Object,
                     auditingService.Object,
                     config.Object,
-                    statisticsService.Object);
+                    statisticsService.Object,
+                    telemetryService.Object);
 
                 packageDeleteService.CallBase = true;
 
@@ -105,7 +110,8 @@ namespace NuGetGallery
                 IPackageFileService packageFileService,
                 IAuditingService auditingService,
                 IPackageDeleteConfiguration config,
-                IStatisticsService statisticsService) : base(
+                IStatisticsService statisticsService,
+                ITelemetryService telemetryService) : base(
                     packageRepository,
                     packageRegistrationRepository,
                     packageDeletesRepository,
@@ -115,7 +121,8 @@ namespace NuGetGallery
                     packageFileService,
                     auditingService,
                     config,
-                    statisticsService)
+                    statisticsService,
+                    telemetryService)
             {
             }
 
