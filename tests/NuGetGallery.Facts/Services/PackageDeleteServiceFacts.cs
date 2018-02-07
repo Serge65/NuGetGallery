@@ -222,6 +222,7 @@ namespace NuGetGallery
                 var actual = await _target.CanPackageBeDeletedByUserAsync(_package);
 
                 Assert.True(actual, "The delete should have been allowed.");
+                VerifyOutcome(UserPackageDeleteOutcome.Accepted);
             }
 
             [Fact]
@@ -233,6 +234,7 @@ namespace NuGetGallery
                 var actual = await _target.CanPackageBeDeletedByUserAsync(_package);
 
                 Assert.True(actual, "The delete should have been allowed.");
+                VerifyOutcome(UserPackageDeleteOutcome.Accepted);
             }
 
             [Fact]
@@ -245,6 +247,7 @@ namespace NuGetGallery
                 var actual = await _target.CanPackageBeDeletedByUserAsync(_package);
 
                 Assert.True(actual, "The delete should have been allowed.");
+                VerifyOutcome(UserPackageDeleteOutcome.Accepted);
             }
 
             [Fact]
@@ -257,6 +260,7 @@ namespace NuGetGallery
                 var actual = await _target.CanPackageBeDeletedByUserAsync(_package);
 
                 Assert.True(actual, "The delete should have been allowed.");
+                VerifyOutcome(UserPackageDeleteOutcome.Accepted);
             }
 
             [Fact]
@@ -269,6 +273,7 @@ namespace NuGetGallery
                 var actual = await _target.CanPackageBeDeletedByUserAsync(_package);
 
                 Assert.True(actual, "The delete should have been allowed.");
+                VerifyOutcome(UserPackageDeleteOutcome.Accepted);
             }
 
             [Fact]
@@ -279,6 +284,7 @@ namespace NuGetGallery
                 var actual = await _target.CanPackageBeDeletedByUserAsync(_package);
 
                 Assert.True(actual, "The delete should have been allowed.");
+                VerifyOutcome(UserPackageDeleteOutcome.Accepted);
             }
 
             [Fact]
@@ -290,6 +296,7 @@ namespace NuGetGallery
                 var actual = await _target.CanPackageBeDeletedByUserAsync(_package);
 
                 Assert.False(actual, "Deletes should not be allowed if the late time range is not defined.");
+                VerifyOutcome(UserPackageDeleteOutcome.TooLate);
             }
 
             [Fact]
@@ -301,6 +308,7 @@ namespace NuGetGallery
                 var actual = await _target.CanPackageBeDeletedByUserAsync(_package);
 
                 Assert.False(actual, "Deletes should not be allowed even if the early time range is not defined.");
+                VerifyOutcome(UserPackageDeleteOutcome.TooLate);
             }
 
             [Fact]
@@ -311,6 +319,7 @@ namespace NuGetGallery
                 var actual = await _target.CanPackageBeDeletedByUserAsync(_package);
 
                 Assert.False(actual, "Deletes should not be allowed after the late time range.");
+                VerifyOutcome(UserPackageDeleteOutcome.TooLate);
             }
 
             [Fact]
@@ -321,6 +330,7 @@ namespace NuGetGallery
                 var actual = await _target.CanPackageBeDeletedByUserAsync(_package);
 
                 Assert.False(actual, "Deletes should not be allowed on a deleted package.");
+                VerifyOutcome(UserPackageDeleteOutcome.AlreadyDeleted);
             }
 
             [Fact]
@@ -331,6 +341,7 @@ namespace NuGetGallery
                 var actual = await _target.CanPackageBeDeletedByUserAsync(_package);
 
                 Assert.False(actual, "Deletes should not be allowed when the package is locked.");
+                VerifyOutcome(UserPackageDeleteOutcome.LockedRegistration);
             }
 
             [Fact]
@@ -341,6 +352,9 @@ namespace NuGetGallery
                 var actual = await _target.CanPackageBeDeletedByUserAsync(_package);
 
                 Assert.False(actual, "Deletes should not be allowed when the feature is disabled.");
+                _telemetryService.Verify(
+                    x => x.TrackUserPackageDelete(It.IsAny<UserPackageDeleteEvent>(), It.IsAny<UserPackageDeleteOutcome>()),
+                    Times.Once);
             }
 
             [Fact]
@@ -352,6 +366,7 @@ namespace NuGetGallery
                 var actual = await _target.CanPackageBeDeletedByUserAsync(_package);
 
                 Assert.False(actual, "Deletes should not be allowed when statistics are stale.");
+                VerifyOutcome(UserPackageDeleteOutcome.StaleStatistics);
             }
 
             [Fact]
@@ -363,6 +378,7 @@ namespace NuGetGallery
                 var actual = await _target.CanPackageBeDeletedByUserAsync(_package);
 
                 Assert.False(actual, "Deletes should not be allowed when statistics are stale.");
+                VerifyOutcome(UserPackageDeleteOutcome.StaleStatistics);
             }
 
             [Fact]
@@ -373,6 +389,7 @@ namespace NuGetGallery
                 var actual = await _target.CanPackageBeDeletedByUserAsync(_package);
 
                 Assert.False(actual, "Deletes should not be allowed when the ID has too many downloads.");
+                VerifyOutcome(UserPackageDeleteOutcome.TooManyIdDatabaseDownloads);
             }
 
             [Fact]
@@ -384,6 +401,7 @@ namespace NuGetGallery
                 var actual = await _target.CanPackageBeDeletedByUserAsync(_package);
 
                 Assert.False(actual, "Deletes should not be allowed when the ID report has too many downloads.");
+                VerifyOutcome(UserPackageDeleteOutcome.TooManyIdReportDownloads);
             }
 
             [Fact]
@@ -395,6 +413,7 @@ namespace NuGetGallery
                 var actual = await _target.CanPackageBeDeletedByUserAsync(_package);
 
                 Assert.False(actual, "Deletes should not be allowed when the version has too many downloads.");
+                VerifyOutcome(UserPackageDeleteOutcome.TooManyVersionDatabaseDownloads);
             }
 
             [Fact]
@@ -407,6 +426,17 @@ namespace NuGetGallery
                 var actual = await _target.CanPackageBeDeletedByUserAsync(_package);
 
                 Assert.False(actual, "Deletes should not be allowed when the version report has too many downloads.");
+                VerifyOutcome(UserPackageDeleteOutcome.TooManyVersionReportDownloads);
+            }
+
+            private void VerifyOutcome(UserPackageDeleteOutcome outcome)
+            {
+                _telemetryService.Verify(
+                    x => x.TrackUserPackageDelete(It.IsAny<UserPackageDeleteEvent>(), outcome),
+                    Times.Once);
+                _telemetryService.Verify(
+                    x => x.TrackUserPackageDelete(It.IsAny<UserPackageDeleteEvent>(), It.IsAny<UserPackageDeleteOutcome>()),
+                    Times.Once);
             }
 
             private static StatisticsFact MakeFact(string version, int downloads)
