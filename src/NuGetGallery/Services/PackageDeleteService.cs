@@ -183,6 +183,7 @@ namespace NuGetGallery
 
             var details = new UserPackageDeleteEvent(
                 sinceCreated,
+                package.Key,
                 package.PackageRegistration.Id,
                 package.NormalizedVersion,
                 package.PackageRegistration.DownloadCount,

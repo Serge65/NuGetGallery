@@ -78,6 +78,7 @@ namespace NuGetGallery
                         (TrackAction)(s => s.TrackUserPackageDelete(
                             new UserPackageDeleteEvent(
                                 TimeSpan.FromHours(3),
+                                11,
                                 "NuGet.Versioning",
                                 "4.5.0",
                                 124101,

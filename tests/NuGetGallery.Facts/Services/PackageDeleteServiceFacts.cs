@@ -354,7 +354,7 @@ namespace NuGetGallery
                 Assert.False(actual, "Deletes should not be allowed when the feature is disabled.");
                 _telemetryService.Verify(
                     x => x.TrackUserPackageDelete(It.IsAny<UserPackageDeleteEvent>(), It.IsAny<UserPackageDeleteOutcome>()),
-                    Times.Once);
+                    Times.Never);
             }
 
             [Fact]

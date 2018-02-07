@@ -9,6 +9,7 @@ namespace NuGetGallery
     {
         public UserPackageDeleteEvent(
             TimeSpan sinceCreated,
+            int packageKey,
             string packageId,
             string packageVersion,
             int idDatabaseDownloads,
@@ -17,6 +18,7 @@ namespace NuGetGallery
             int versionReportDownloads)
         {
             SinceCreated = sinceCreated;
+            PackageKey = packageKey;
             PackageId = packageId ?? throw new ArgumentNullException(nameof(packageId));
             PackageVersion = packageVersion ?? throw new ArgumentNullException(nameof(packageVersion));
             IdDatabaseDownloads = idDatabaseDownloads;
@@ -26,6 +28,7 @@ namespace NuGetGallery
         }
 
         public TimeSpan SinceCreated { get; }
+        public int PackageKey { get; }
         public string PackageId { get; }
         public string PackageVersion { get; }
         public int IdDatabaseDownloads { get; }

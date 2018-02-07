@@ -5,7 +5,6 @@ using System;
 using System.Collections.Generic;
 using System.Security.Principal;
 using System.Web;
-using Elmah;
 using NuGetGallery.Authentication;
 using NuGetGallery.Diagnostics;
 
@@ -59,6 +58,7 @@ namespace NuGetGallery
 
         // User package delete properties
         public const string Outcome = "Outcome";
+        public const string PackageKey = "PackageKey";
         public const string IdDatabaseDownloads = "IdDatabaseDownloads";
         public const string IdReportDownloads = "IdReportDownloads";
         public const string VersionDatabaseDownloads = "VersionDatabaseDownloads";
@@ -269,6 +269,7 @@ namespace NuGetGallery
 
             TrackMetric(Events.UserPackageDeleteAfterHours, hours, properties => {
                 properties.Add(Outcome, outcome.ToString());
+                properties.Add(PackageKey, details.PackageKey.ToString());
                 properties.Add(PackageId, details.PackageId);
                 properties.Add(PackageVersion, details.PackageVersion);
                 properties.Add(IdDatabaseDownloads, details.IdDatabaseDownloads.ToString());
