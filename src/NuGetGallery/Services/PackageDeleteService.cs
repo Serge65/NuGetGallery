@@ -70,16 +70,16 @@ namespace NuGetGallery
             _telemetryService = telemetryService ?? throw new ArgumentNullException(nameof(telemetryService));
 
             if (config.HourLimitWithMaximumDownloads.HasValue
-                && config.StatisticsUpdateFrequencyInHours.HasValue
-                && config.HourLimitWithMaximumDownloads.Value <= config.StatisticsUpdateFrequencyInHours.Value)
+                && config.ExpectedStatisticsUpdateFrequencyInHours.HasValue
+                && config.HourLimitWithMaximumDownloads.Value <= config.ExpectedStatisticsUpdateFrequencyInHours.Value)
             {
-                throw new ArgumentException($"{nameof(_config.StatisticsUpdateFrequencyInHours)} must be less than " +
+                throw new ArgumentException($"{nameof(_config.ExpectedStatisticsUpdateFrequencyInHours)} must be less than " +
                     $"{nameof(_config.HourLimitWithMaximumDownloads)}.",
                     nameof(config));
             }
         }
 
-        public async Task<bool> CanPackageBeDeletedByUserAsync(Package package)
+        public async Task<bool> CanPackageBeDeletedByUserAsync(Package package, bool onlyRejectedTelemetry)
         {
             if (!_config.AllowUsersToDeletePackages)
             {
@@ -90,40 +90,35 @@ namespace NuGetGallery
 
             if (package.PackageStatusKey == PackageStatus.Deleted)
             {
-                _telemetryService.TrackUserPackageDelete(details, UserPackageDeleteOutcome.AlreadyDeleted);
-                return false;
+                return IsAccepted(details, onlyRejectedTelemetry, UserPackageDeleteOutcome.AlreadyDeleted);
             }
 
             if (package.PackageRegistration.IsLocked)
             {
-                _telemetryService.TrackUserPackageDelete(details, UserPackageDeleteOutcome.LockedRegistration);
-                return false;
+                return IsAccepted(details, onlyRejectedTelemetry, UserPackageDeleteOutcome.LockedRegistration);
             }
 
             // Handle the "early" delete case, where the package version download count is not considered but total
             // download count on the entire ID (all versions) is considered.
-            if (_config.StatisticsUpdateFrequencyInHours.HasValue
-                && details.SinceCreated < TimeSpan.FromHours(_config.StatisticsUpdateFrequencyInHours.Value))
+            if (_config.ExpectedStatisticsUpdateFrequencyInHours.HasValue
+                && details.SinceCreated < TimeSpan.FromHours(_config.ExpectedStatisticsUpdateFrequencyInHours.Value))
             {
                 if (_config.MaximumDownloadsForPackageId.HasValue)
                 {
                     // Do not allow a delete of a package version if the package registration record has too many downloads.
                     if (details.IdDatabaseDownloads > _config.MaximumDownloadsForPackageId.Value)
                     {
-                        _telemetryService.TrackUserPackageDelete(details, UserPackageDeleteOutcome.TooManyIdDatabaseDownloads);
-                        return false;
+                        return IsAccepted(details, onlyRejectedTelemetry, UserPackageDeleteOutcome.TooManyIdDatabaseDownloads);
                     }
 
                     // Do not allow a delete of a package version if the package ID report has too many downloads.
                     if (details.IdReportDownloads > _config.MaximumDownloadsForPackageId.Value)
                     {
-                        _telemetryService.TrackUserPackageDelete(details, UserPackageDeleteOutcome.TooManyIdReportDownloads);
-                        return false;
+                        return IsAccepted(details, onlyRejectedTelemetry, UserPackageDeleteOutcome.TooManyIdReportDownloads);
                     }
                 }
 
-                _telemetryService.TrackUserPackageDelete(details, UserPackageDeleteOutcome.Accepted);
-                return true;
+                return IsAccepted(details, onlyRejectedTelemetry, UserPackageDeleteOutcome.Accepted);
             }
 
             // Handle the "late" delete case, where package version download count is considered.
@@ -135,30 +130,49 @@ namespace NuGetGallery
                     // Do not allow the delete if the statistics are stale.
                     if (await AreStatisticsStaleAsync())
                     {
-                        _telemetryService.TrackUserPackageDelete(details, UserPackageDeleteOutcome.StaleStatistics);
-                        return false;
+                        return IsAccepted(details, onlyRejectedTelemetry, UserPackageDeleteOutcome.StaleStatistics);
                     }
 
                     // Do not allow a delete of a package version if the package record has too many downloads.
                     if (details.VersionDatabaseDownloads > _config.MaximumDownloadsForPackageVersion.Value)
                     {
-                        return false;
+                        return IsAccepted(details, onlyRejectedTelemetry, UserPackageDeleteOutcome.TooManyVersionDatabaseDownloads);
                     }
 
                     // Do not allow a delete of a package version if the package report has too many downloads.
                     if (details.VersionReportDownloads > _config.MaximumDownloadsForPackageVersion.Value)
                     {
-                        return false;
+                        return IsAccepted(details, onlyRejectedTelemetry, UserPackageDeleteOutcome.TooManyVersionReportDownloads);
                     }
                 }
 
-                _telemetryService.TrackUserPackageDelete(details, UserPackageDeleteOutcome.Accepted);
-                return true;
+                return IsAccepted(details, onlyRejectedTelemetry, UserPackageDeleteOutcome.Accepted);
             }
 
             // If no time ranges are configured, allow downloads any time.
-            return !_config.HourLimitWithMaximumDownloads.HasValue
-                && !_config.StatisticsUpdateFrequencyInHours.HasValue;
+            if (_config.HourLimitWithMaximumDownloads.HasValue
+                || _config.ExpectedStatisticsUpdateFrequencyInHours.HasValue)
+            {
+                return IsAccepted(details, onlyRejectedTelemetry, UserPackageDeleteOutcome.TooLate);
+            }
+            
+            return IsAccepted(details, onlyRejectedTelemetry, UserPackageDeleteOutcome.Accepted);
+        }
+        
+        private bool IsAccepted(
+            UserPackageDeleteEvent details,
+            bool onlyRejectedTelemetry,
+            UserPackageDeleteOutcome outcome)
+        {
+            var isAccepted = outcome == UserPackageDeleteOutcome.Accepted;
+            
+            if (!isAccepted
+                || (isAccepted && !onlyRejectedTelemetry))
+            {
+                _telemetryService.TrackUserPackageDelete(details, outcome);
+            }
+            
+            return isAccepted;
         }
 
         private async Task<UserPackageDeleteEvent> GetUserPackageDeleteEvent(Package package)
@@ -170,6 +184,7 @@ namespace NuGetGallery
             var idReportDownloads = report?
                 .Facts
                 .Sum(x => x.Amount) ?? 0;
+
             var versionReportDownloads = report?
                 .Facts
                 .Where(x => StringComparer.OrdinalIgnoreCase.Equals(package.NormalizedVersion, x.Dimensions["Version"]))
@@ -183,6 +198,7 @@ namespace NuGetGallery
                 idReportDownloads,
                 package.DownloadCount,
                 versionReportDownloads);
+
             return details;
         }
 
@@ -197,7 +213,7 @@ namespace NuGetGallery
             }
 
             var sinceUpdated = DateTime.UtcNow - lastUpdated.Value;
-            if (sinceUpdated > TimeSpan.FromHours(_config.StatisticsUpdateFrequencyInHours.Value))
+            if (sinceUpdated > TimeSpan.FromHours(_config.ExpectedStatisticsUpdateFrequencyInHours.Value))
             {
                 return true;
             }

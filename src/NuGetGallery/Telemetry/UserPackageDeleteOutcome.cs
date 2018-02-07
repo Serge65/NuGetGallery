@@ -10,5 +10,9 @@ namespace NuGetGallery
         LockedRegistration,
         TooManyIdDatabaseDownloads,
         TooManyIdReportDownloads,
+        StaleStatistics,
+        TooManyVersionDatabaseDownloads,
+        TooManyVersionReportDownloads,
+        TooLate,
     }
 }

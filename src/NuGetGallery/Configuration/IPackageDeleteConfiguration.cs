@@ -29,23 +29,23 @@ namespace NuGetGallery.Configuration
         /// <see cref="AllowUsersToDeletePackages"/> and <see cref="MaximumDownloadsForPackageVersion"/> take
         /// precedence over this option.
         /// </summary>
-        int? StatisticsUpdateFrequencyInHours { get; }
+        int? ExpectedStatisticsUpdateFrequencyInHours { get; }
 
         /// <summary>
         /// The hour threshold for the "late" delete criteria. If a package was pushed less than this many hours ago
         /// and if the package version has less than <see cref="MaximumDownloadsForPackageVersion"/> downloads, the
         /// package can be deleted. If this value is null, the package cannot be deleted after
-        /// <see cref="StatisticsUpdateFrequencyInHours"/> hours. Also, if the package has not had its download
-        /// statistics updated in the last <see cref="StatisticsUpdateFrequencyInHours"/> hours, the delete is not
-        /// allowed since the download data is too stale. If <see cref="StatisticsUpdateFrequencyInHours"/> is null,
+        /// <see cref="ExpectedStatisticsUpdateFrequencyInHours"/> hours. Also, if the package has not had its download
+        /// statistics updated in the last <see cref="ExpectedStatisticsUpdateFrequencyInHours"/> hours, the delete is not
+        /// allowed since the download data is too stale. If <see cref="ExpectedStatisticsUpdateFrequencyInHours"/> is null,
         /// download statistics are never considered stale.
         /// </summary>
         int? HourLimitWithMaximumDownloads { get; }
 
         /// <summary>
         /// If the number of downloads on a package is greater than this value, the package was published less than
-        /// <see cref="StatisticsUpdateFrequencyInHours"/> hours ago, and the package was downloaded more than
-        /// <see cref="StatisticsUpdateFrequencyInHours"/> hours ago, the package can be deleted. If this value is
+        /// <see cref="ExpectedStatisticsUpdateFrequencyInHours"/> hours ago, and the package was downloaded more than
+        /// <see cref="ExpectedStatisticsUpdateFrequencyInHours"/> hours ago, the package can be deleted. If this value is
         /// null, this download count restriction is not applied.
         /// </summary>
         int? MaximumDownloadsForPackageVersion { get; }

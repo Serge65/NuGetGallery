@@ -151,7 +151,7 @@ namespace NuGetGallery
             {
                 // Arrange
                 var config = new Mock<IPackageDeleteConfiguration>();
-                config.Setup(x => x.StatisticsUpdateFrequencyInHours).Returns(24);
+                config.Setup(x => x.ExpectedStatisticsUpdateFrequencyInHours).Returns(24);
                 config.Setup(x => x.HourLimitWithMaximumDownloads).Returns(23);
 
                 // Act & Assert
@@ -166,6 +166,7 @@ namespace NuGetGallery
         public class TheCanPackageBeDeletedByUserAsyncMethod
         {
             private readonly Package _package;
+            private readonly bool _onlyRejectedTelemetry;
             private readonly StatisticsPackagesReport _packageIdReport;
             private readonly StatisticsPackagesReport _packageVersionReport;
             private readonly Mock<IPackageDeleteConfiguration> _config;
@@ -187,6 +188,7 @@ namespace NuGetGallery
                     DownloadCount = 0,
                     Created = DateTime.UtcNow,
                 };
+                _onlyRejectedTelemetry = false;
                 _packageIdReport = new StatisticsPackagesReport
                 {
                     Facts = new List<StatisticsFact>()
@@ -205,7 +207,7 @@ namespace NuGetGallery
                 _config = new Mock<IPackageDeleteConfiguration>();
                 _config.Setup(x => x.AllowUsersToDeletePackages).Returns(true);
                 _config.Setup(x => x.MaximumDownloadsForPackageId).Returns(125000);
-                _config.Setup(x => x.StatisticsUpdateFrequencyInHours).Returns(24);
+                _config.Setup(x => x.ExpectedStatisticsUpdateFrequencyInHours).Returns(24);
                 _config.Setup(x => x.HourLimitWithMaximumDownloads).Returns(72);
                 _config.Setup(x => x.MaximumDownloadsForPackageVersion).Returns(100);
 
@@ -271,7 +273,7 @@ namespace NuGetGallery
             {
                 _package.Created = DateTime.UtcNow.AddHours(-73);
                 _config.Setup(x => x.HourLimitWithMaximumDownloads).Returns((int?)null);
-                _config.Setup(x => x.StatisticsUpdateFrequencyInHours).Returns((int?)null);
+                _config.Setup(x => x.ExpectedStatisticsUpdateFrequencyInHours).Returns((int?)null);
 
                 var actual = await _target.CanPackageBeDeletedByUserAsync(_package);
 
@@ -303,7 +305,7 @@ namespace NuGetGallery
             public async Task DoesNotAllowDeleteWhenCreatedAfterLateTimeRangeAndEarlyIsUndefined()
             {
                 _package.Created = DateTime.UtcNow.AddHours(-73);
-                _config.Setup(x => x.StatisticsUpdateFrequencyInHours).Returns((int?)null);
+                _config.Setup(x => x.ExpectedStatisticsUpdateFrequencyInHours).Returns((int?)null);
 
                 var actual = await _target.CanPackageBeDeletedByUserAsync(_package);
 

@@ -7,7 +7,7 @@ namespace NuGetGallery.Configuration
     {
         public bool AllowUsersToDeletePackages { get; set; }
         public int? MaximumDownloadsForPackageId { get; set; }
-        public int? StatisticsUpdateFrequencyInHours { get; set; }
+        public int? ExpectedStatisticsUpdateFrequencyInHours { get; set; }
         public int? HourLimitWithMaximumDownloads { get; set; }
         public int? MaximumDownloadsForPackageVersion { get; set; }
     }

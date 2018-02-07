@@ -655,7 +655,9 @@ namespace NuGetGallery
                 return RedirectToAction(nameof(ReportAbuse), new { id, version });
             }
 
-            var allowDelete = await _packageDeleteService.CanPackageBeDeletedByUserAsync(package);
+            var allowDelete = await _packageDeleteService.CanPackageBeDeletedByUserAsync(
+                package,
+                onlyRejectedTelemetry: true);
 
             var model = new ReportMyPackageViewModel
             {
@@ -804,7 +806,10 @@ namespace NuGetGallery
             var allowDelete = false;
             if (reportForm.DeleteDecision != PackageDeleteDecision.ContactSupport)
             {
-                allowDelete = await _packageDeleteService.CanPackageBeDeletedByUserAsync(package);
+                allowDelete = await _packageDeleteService.CanPackageBeDeletedByUserAsync(
+                    package,
+                    onlyRejectedTelemetry: false);
+
                 if (!allowDelete)
                 {
                     reportForm.DeleteDecision = null;
